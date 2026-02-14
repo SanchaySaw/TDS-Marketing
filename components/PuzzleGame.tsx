@@ -8,14 +8,12 @@ interface PuzzleGameProps {
 
 const GRID_SIZE = 3;
 const TILE_COUNT = GRID_SIZE * GRID_SIZE;
-const SECRET_LOCATION = "90 FT THAKURLI EAST";
-
-// Updated with the latest direct link provided by the user
 const PUZZLE_IMAGE_URL = 'https://i.ibb.co/SwvYN073/db64273f-5d15-4808-b207-3070ff2fe067.jpg';
 
 const PuzzleGame: React.FC<PuzzleGameProps> = ({ onComplete }) => {
+  // pieces[i] stores the original index of the tile currently at grid position i.
+  // The empty slot is TILE_COUNT - 1.
   const [pieces, setPieces] = useState<number[]>([]);
-  const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const [isCompleted, setIsCompleted] = useState(false);
   const [finalImageUrl, setFinalImageUrl] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
@@ -33,21 +31,17 @@ const PuzzleGame: React.FC<PuzzleGameProps> = ({ onComplete }) => {
         return;
       }
 
-      // Draw the cart image as cover
       const scale = Math.max(size / imgElement.width, size / imgElement.height);
       const x = (size / 2) - (imgElement.width / 2) * scale;
       const y = (size / 2) - (imgElement.height / 2) * scale;
       ctx.drawImage(imgElement, x, y, imgElement.width * scale, imgElement.height * scale);
 
-      // Dark overlay for text contrast
       ctx.fillStyle = 'rgba(15, 59, 46, 0.45)';
       ctx.fillRect(0, 0, size, size);
 
-      // Add the Secret Text (Location)
       ctx.fillStyle = '#f2e6c9';
       ctx.textAlign = 'center';
       ctx.font = '900 64px Montserrat, sans-serif';
-      
       ctx.shadowColor = 'rgba(0,0,0,0.8)';
       ctx.shadowBlur = 15;
       
@@ -55,61 +49,69 @@ const PuzzleGame: React.FC<PuzzleGameProps> = ({ onComplete }) => {
       ctx.fillText("THAKURLI", size / 2, size / 2 + 25);
       ctx.fillText("EAST", size / 2, size / 2 + 100);
 
-      // Try to get data URL - this might fail if CORS is not allowed by the host
       setFinalImageUrl(canvas.toDataURL('image/png'));
     } catch (e) {
-      console.warn("Canvas Composition Failed (Likely CORS). Using Raw Image Fallback.", e);
-      // Fallback to the raw image if canvas is tainted
       setFinalImageUrl(PUZZLE_IMAGE_URL);
     }
   }, []);
 
   const shuffle = useCallback(() => {
-    const initial = Array.from({ length: TILE_COUNT }, (_, i) => i);
-    let shuffled = [...initial];
-    for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    // Start with a solved state
+    let state = Array.from({ length: TILE_COUNT }, (_, i) => i);
+    let emptyIdx = TILE_COUNT - 1;
+
+    // Simulate 100 valid moves to ensure solvability
+    for (let i = 0; i < 100; i++) {
+      const row = Math.floor(emptyIdx / GRID_SIZE);
+      const col = emptyIdx % GRID_SIZE;
+      
+      const options = [];
+      if (row > 0) options.push(emptyIdx - GRID_SIZE);
+      if (row < GRID_SIZE - 1) options.push(emptyIdx + GRID_SIZE);
+      if (col > 0) options.push(emptyIdx - 1);
+      if (col < GRID_SIZE - 1) options.push(emptyIdx + 1);
+      
+      const moveIdx = options[Math.floor(Math.random() * options.length)];
+      [state[emptyIdx], state[moveIdx]] = [state[moveIdx], state[emptyIdx]];
+      emptyIdx = moveIdx;
     }
-    // Ensure it's not solved at start
-    if (shuffled.every((val, i) => val === i)) {
-      [shuffled[0], shuffled[1]] = [shuffled[1], shuffled[0]];
-    }
-    setPieces(shuffled);
+    
+    setPieces(state);
   }, []);
 
   useEffect(() => {
     const img = new Image();
-    // Use anonymous to allow canvas processing if server allows it
     img.crossOrigin = "anonymous";
-    
     img.onload = () => {
       createCompositeImage(img);
       shuffle();
     };
-
     img.onerror = () => {
       setError("Unable To Load The Cart Image. Please Check Your Connection.");
     };
-
     img.src = PUZZLE_IMAGE_URL;
   }, [createCompositeImage, shuffle]);
 
-  const handleTileClick = (index: number) => {
-    if (isCompleted || !finalImageUrl) return;
+  const handlePieceClick = (clickedIdx: number) => {
+    if (isCompleted) return;
 
-    if (selectedIdx === null) {
-      setSelectedIdx(index);
-    } else {
-      const newPieces = [...pieces];
-      const temp = newPieces[selectedIdx];
-      newPieces[selectedIdx] = newPieces[index];
-      newPieces[index] = temp;
-      
-      setPieces(newPieces);
-      setSelectedIdx(null);
+    const emptyIdx = pieces.indexOf(TILE_COUNT - 1);
+    
+    const row = Math.floor(clickedIdx / GRID_SIZE);
+    const col = clickedIdx % GRID_SIZE;
+    const eRow = Math.floor(emptyIdx / GRID_SIZE);
+    const eCol = emptyIdx % GRID_SIZE;
 
-      if (newPieces.every((val, i) => val === i)) {
+    // A tile is adjacent if it's in the same row/col and distance is 1
+    const dist = Math.abs(row - eRow) + Math.abs(col - eCol);
+
+    if (dist === 1) {
+      const newState = [...pieces];
+      [newState[clickedIdx], newState[emptyIdx]] = [newState[emptyIdx], newState[clickedIdx]];
+      setPieces(newState);
+
+      // Check if solved (ignoring empty space for now, or matching exactly)
+      if (newState.every((val, i) => val === i)) {
         setIsCompleted(true);
         onComplete();
       }
@@ -138,43 +140,39 @@ const PuzzleGame: React.FC<PuzzleGameProps> = ({ onComplete }) => {
 
   return (
     <div className="relative w-[330px] h-[330px] grid grid-cols-3 gap-1.5 bg-[#0a2e24] p-3 rounded-2xl shadow-2xl border border-[#d4af37]/30">
-      {pieces.map((pieceValue, displayIndex) => {
-        const row = Math.floor(pieceValue / GRID_SIZE);
-        const col = pieceValue % GRID_SIZE;
-        const isSelected = selectedIdx === displayIndex;
+      {pieces.map((pieceValue, gridIndex) => {
+        const isEmpty = pieceValue === TILE_COUNT - 1;
+        const originalRow = Math.floor(pieceValue / GRID_SIZE);
+        const originalCol = pieceValue % GRID_SIZE;
 
-        const posX = (col / (GRID_SIZE - 1)) * 100;
-        const posY = (row / (GRID_SIZE - 1)) * 100;
+        const posX = (originalCol / (GRID_SIZE - 1)) * 100;
+        const posY = (originalRow / (GRID_SIZE - 1)) * 100;
 
         return (
           <motion.div
-            key={`piece-${pieceValue}`}
+            key={`tile-${pieceValue}`}
             layout
-            onClick={() => handleTileClick(displayIndex)}
+            onClick={() => handlePieceClick(gridIndex)}
             className={`
               relative overflow-hidden aspect-square cursor-pointer rounded-lg
-              ${isSelected ? 'scale-90 ring-4 ring-[#f2e6c9] z-20 shadow-[0_0_35px_rgba(242,230,201,0.8)]' : 'ring-1 ring-white/10'}
+              ${isEmpty && !isCompleted ? 'bg-transparent' : 'ring-1 ring-white/10 shadow-lg bg-[#1a5c48]'}
               transition-all duration-300
             `}
             style={{
-              backgroundImage: `url(${finalImageUrl})`,
+              backgroundImage: (isEmpty && !isCompleted) ? 'none' : `url(${finalImageUrl})`,
               backgroundSize: '300% 300%',
               backgroundPosition: `${posX}% ${posY}%`,
-              backgroundRepeat: 'no-repeat',
             }}
           >
-            {/* Simple dark overlay for unsolved pieces */}
-            {!isCompleted && !isSelected && (
-               <div className="absolute inset-0 bg-black/20 hover:bg-transparent transition-colors pointer-events-none" />
-            )}
-            
-            {/* Success effect */}
             {isCompleted && (
               <motion.div 
                 initial={{ opacity: 0 }} 
                 animate={{ opacity: 1 }} 
-                className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/20 to-white/0 pointer-events-none" 
+                className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/10 to-white/0 pointer-events-none" 
               />
+            )}
+            {!isCompleted && !isEmpty && (
+              <div className="absolute inset-0 bg-black/10 active:bg-transparent" />
             )}
           </motion.div>
         );

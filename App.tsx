@@ -1,6 +1,6 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { motion, AnimatePresence, useMotionValue, useTransform } from 'framer-motion';
 import canvasConfetti from 'canvas-confetti';
 import { Instagram, Send, Share2, MapPin, CheckCircle, ChevronRight } from 'lucide-react';
 import { AppScreen } from './types';
@@ -11,7 +11,13 @@ const App: React.FC = () => {
   const [hasFollowed, setHasFollowed] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
   
-  // Generate or retrieve a unique ID for the user session
+  // Slide button state
+  const dragX = useMotionValue(0);
+  const buttonWidth = 280;
+  const handleWidth = 60;
+  const unlockThreshold = buttonWidth - handleWidth - 20;
+  const opacity = useTransform(dragX, [0, unlockThreshold], [1, 0]);
+
   const uniqueId = useMemo(() => {
     const existingId = localStorage.getItem('tds_unique_id');
     if (existingId) return existingId;
@@ -20,7 +26,6 @@ const App: React.FC = () => {
     return newId;
   }, []);
 
-  // Load progress on mount
   useEffect(() => {
     const savedScreen = localStorage.getItem('tds_current_screen') as AppScreen;
     const followed = localStorage.getItem('tds_has_followed') === 'true';
@@ -32,7 +37,6 @@ const App: React.FC = () => {
     setIsLoaded(true);
   }, []);
 
-  // Sync progress to localStorage
   const navigateTo = (screen: AppScreen) => {
     setCurrentScreen(screen);
     localStorage.setItem('tds_current_screen', screen);
@@ -59,22 +63,23 @@ const App: React.FC = () => {
   };
 
   const handleFollowClick = () => {
-    // Redirect in same tab
     localStorage.setItem('tds_has_followed', 'true');
     setHasFollowed(true);
-    window.open('https://instagram.com/thedrinkstop.in', '_self');
+    window.location.href = 'https://www.instagram.com/thedrinkstop.in/';
   };
 
   const handleDMClick = () => {
-    const message = encodeURIComponent(`Hey! I Solved Your Puzzle 😎 Location: 90 Ft Thakurli East. My Unique Code Is TDS10-${uniqueId}. Loved The Game!`);
-    // Using ig.me for direct DM redirection
-    window.open(`https://ig.me/m/thedrinkstop.in?text=${message}`, '_self');
-    nextScreen();
+    const messageText = `Hey! I Solved Your Puzzle 😎 Location: 90 Ft Thakurli East. My Unique Code Is TDS10-${uniqueId}. Loved The Game! Can't Wait For Opening 💚`;
+    const message = encodeURIComponent(messageText);
+    window.location.href = `https://ig.me/m/thedrinkstop.in?text=${message}`;
+    setTimeout(() => {
+        nextScreen();
+    }, 500);
   };
 
   const handleWhatsAppShare = () => {
     const text = encodeURIComponent(`I Just Unlocked 10% OFF At The Drink Stop 😍 90 Ft Thakurli East. Play The Puzzle! My Code: TDS10-${uniqueId}`);
-    window.open(`https://wa.me/?text=${text}`, '_self');
+    window.location.href = `https://wa.me/?text=${text}`;
   };
 
   const handleStoryShare = () => {
@@ -109,16 +114,43 @@ const App: React.FC = () => {
               <div className="w-16 h-1 bg-[#d4af37] mx-auto mt-4 rounded-full"></div>
             </div>
 
-            <div className="space-y-6 w-full">
+            <div className="flex flex-col items-center gap-10 w-full">
               <p className="text-xl font-bold opacity-90 text-[#f2e6c9]">
                 🧩 Location Unlock Challenge
               </p>
-              <button
-                onClick={nextScreen}
-                className="w-full py-4 bg-[#1a5c48] text-[#f2e6c9] rounded-2xl font-black text-xl hover:scale-105 active:scale-95 transition-transform flex items-center justify-center gap-2 shadow-xl border-b-4 border-[#0a2e24]"
+              
+              {/* Custom Slide To Unlock Button */}
+              <div 
+                className="relative bg-[#f2e6c9] rounded-full flex items-center p-1 overflow-hidden shadow-2xl"
+                style={{ width: buttonWidth, height: 75 }}
               >
-                Start Puzzle <ChevronRight size={24} />
-              </button>
+                <motion.div style={{ opacity }} className="absolute inset-0 flex items-center justify-center pl-10">
+                  <span className="text-[#0f3b2e] font-black text-xl pointer-events-none uppercase tracking-tight">
+                    Slide To Start
+                  </span>
+                </motion.div>
+                
+                <motion.div
+                  drag="x"
+                  dragConstraints={{ left: 0, right: buttonWidth - handleWidth - 10 }}
+                  dragElastic={0.1}
+                  onDragEnd={(_, info) => {
+                    if (info.offset.x >= unlockThreshold - 20) {
+                      nextScreen();
+                    }
+                  }}
+                  style={{ x: dragX }}
+                  className="z-10 cursor-grab active:cursor-grabbing"
+                >
+                  <div className="w-[70px] h-[70px] flex items-center justify-center bg-transparent">
+                    <img 
+                      src="https://i.ibb.co/0RfdVT5J/IMG-3773.png" 
+                      alt="The Drink Stop Cup" 
+                      className="w-full h-full object-contain drop-shadow-lg"
+                    />
+                  </div>
+                </motion.div>
+              </div>
             </div>
 
             <p className="mb-8 font-bold tracking-widest uppercase text-xs opacity-50">
@@ -166,7 +198,7 @@ const App: React.FC = () => {
           >
             <div className="mb-6 text-center">
               <h3 className="text-2xl font-black mb-1">Fix The Cart</h3>
-              <p className="text-sm opacity-70 italic">Tap Pieces To Swap & Reveal Location</p>
+              <p className="text-sm opacity-70 italic">Slide Pieces To Reveal Location</p>
             </div>
             
             <PuzzleGame onComplete={handlePuzzleComplete} />
